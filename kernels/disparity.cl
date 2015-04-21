@@ -4,8 +4,8 @@ __kernel void disparity(__write_only image2d_t disparity, __read_only image2d_t 
 {
     const int width = get_image_width(disparity);
     const int height = get_image_width(disparity);
-    const int x = get_global_id(0);
-    const int y = get_global_id(1);
+    int x = get_global_id(0);
+    int y = get_global_id(1);
 
     unsigned int minimum_sad = 1000000000;
 	unsigned int disparity_value = 0;
@@ -45,8 +45,8 @@ __kernel void disparity(__write_only image2d_t disparity, __read_only image2d_t 
 
 __kernel void disparityToDepth(__write_only image2d_t depth_map, __read_only image2d_t disparity_map, const int focal_length, const int baseline_mm)
 {
-    const int x = get_global_id(0);
-    const int y = get_global_id(1);
+    int x = get_global_id(0);
+    int y = get_global_id(1);
     const float baseline = (float) baseline_mm / 1000.0;
     
     // Implements the equation "Z = f * B / d"
@@ -59,135 +59,95 @@ __kernel void disparityToDepth(__write_only image2d_t depth_map, __read_only ima
 
 __kernel void depthToVertex(__read_only image2d_t depth_map, __global const int* inverse_intrinsic_matrix, __global const int* vertex_martrix)
 {
-    const int x = get_global_id(0);
-    const int y = get_global_id(1);
+    int x = get_global_id(0);
+    int y = get_global_id(1);
 
     
 }
 
-/*bool intersect(float3 ray_origin, float3 ray_direction, int3 box_point_a, int3 box_point_b, int3* box_intersection)
+bool intersect(float3 ray_origin, float3 ray_direction, float3 box_a, float3 box_b, float3* box_intersection)
 {
-    float ray_length_to_box_point_a;
-    float ray_length_to_box_point_b;
-    
-    float box_point_a_intersect_x = (box_point_a.x - ray_origin.x) / ray_direction.x;
-    float box_point_a_intersect_y = (box_point_a.y - ray_origin.y) / ray_direction.y;
-    ray_length_to_box_point_a = (box_point_a_intersect_x > box_point_a_intersect_y) ? box_point_a_intersect_x : box_point_a_intersect_y;
-    
-    
-    float box_point_b_intersect_y = (box_point_b.y - ray_origin.y) / ray_direction.y;
-    float box_point_b_intersect_x = (box_point_b.x - ray_origin.x) / ray_direction.x;
-    ray_length_to_box_point_b = (box_point_b_intersect_x > box_point_b_intersect_y) ? box_point_b_intersect_x : box_point_b_intersect_y;
-    if (box_point_a_intersect_x > box_point_b_intersect_y || box_point_a_intersect_y > box_point_b_intersect_x)
+    float ray_length_enter_box = -1000000000;
+    float ray_length_leave_box = 1000000000;
+
+    // Distance from the ray origin to box points along the x axis
+    if (ray_direction.x != 0)
     {
-        return false;
-    }
-    
-    float box_point_a_intersect_z = (box_point_a.z - ray_origin.z) / ray_direction.z;
-    float box_point_b_intersect_z = (box_point_b.z - ray_origin.z) / ray_direction.z;
-    if (ray_length_to_box_point_a > box_point_b_intersect_z || box_point_a_intersect_z > ray_length_to_box_point_b)
-    {
-        return false;
-    }
-    if (box_point_a_intersect_z > ray_length_to_box_point_a)
-    {
-        ray_length_to_box_point_a = box_point_a_intersect_z;
-    }
-    if (box_point_b_intersect_z < ray_length_to_box_point_b)
-    {
-        ray_length_to_box_point_b = box_point_b_intersect_z;
+        float distance_to_a_along_x = (box_a.x - ray_origin.x) / ray_direction.x;
+        float distance_to_b_along_x = (box_b.x - ray_origin.x) / ray_direction.x;
+        ray_length_enter_box = min(distance_to_a_along_x, distance_to_b_along_x);
+        ray_length_leave_box = max(distance_to_a_along_x, distance_to_b_along_x);
     }
 
-    float ray_length = min(ray_length_to_box_point_a, ray_length_to_box_point_b);
-    box_intersection->x = ray_length * ray_direction.x;
-    box_intersection->y = ray_length * ray_direction.y;
-    box_intersection->z = ray_length * ray_direction.z;
-    return true;
-}*/
-bool intersect(float3 ray_origin, float3 ray_direction, float3 min, float3 max, float3* box_intersection)
-{
-    float tmin = (min.x - ray_origin.x) / ray_direction.x;
-    float tmax = (max.x - ray_origin.x) / ray_direction.x;
-    if (tmin > tmax)
+    // Distance from the ray origin to box points along the y axis
+    if (ray_direction.y != 0)
     {
-        float temp = tmin;
-        tmin = tmax;
-        tmax = temp;
+        float distance_to_a_along_y = (box_a.y - ray_origin.y) / ray_direction.y;
+        float distance_to_b_along_y = (box_b.y - ray_origin.y) / ray_direction.y;
+        ray_length_enter_box = max(ray_length_enter_box, min(distance_to_a_along_y, distance_to_b_along_y));
+        ray_length_leave_box = min(ray_length_leave_box, max(distance_to_a_along_y, distance_to_b_along_y));
     }
-    float tymin = (min.y - ray_origin.y) / ray_direction.y;
-    float tymax = (max.y - ray_origin.y) / ray_direction.y;
-    if (tymin > tymax)
+
+    // Distance from the ray origin to box points along the z axis
+    if (ray_direction.z != 0)
     {
-        float temp = tymin;
-        tymin = tymax;
-        tymax = temp;
+        float distance_to_a_along_z = (box_a.z - ray_origin.z) / ray_direction.z;
+        float distance_to_b_along_z = (box_b.z - ray_origin.z) / ray_direction.z;
+        ray_length_enter_box = max(ray_length_enter_box, min(distance_to_a_along_z, distance_to_b_along_z));
+        ray_length_leave_box = min(ray_length_leave_box, max(distance_to_a_along_z, distance_to_b_along_z));
     }
-    if ((tmin > tymax) || (tymin > tmax))
-        return false;
-    if (tymin > tmin)
-        tmin = tymin;
-    if (tymax < tmax)
-        tmax = tymax;
-    float tzmin = (min.z - ray_origin.z) / ray_direction.z;
-    float tzmax = (max.z - ray_origin.z) / ray_direction.z;
-    if (tzmin > tzmax)
+
+    // Final decision on whether the ray intersected with the box
+    if (ray_length_enter_box <= ray_length_leave_box)
     {
-        float temp = tzmin;
-        tzmin = tzmax;
-        tzmax = temp;
+        *box_intersection = ray_origin + ray_direction * ray_length_enter_box;
+        return true;
     }
-    if ((tmin > tzmax) || (tzmin > tmax))
-        return false;
-    if (tzmin > tmin)
-        tmin = tzmin;
-    if (tzmax < tmax)
-        tmax = tzmax;
-    //if ((tmin > r.tmax) || (tmax < r.tmin)) return false;
-    //if (r.tmin < tmin) r.tmin = tmin;
-    *box_intersection = ray_direction * tmin;
-    //if (r.tmax > tmax) r.tmax = tmax;
-    return true;
+    return false;
 }
 
-__kernel void render(__global const int* voxels, int size, __write_only image2d_t screen)
-{    
-    const float3 eye = (float3) (0, 0, 10);
-    const float screen_z = 5;
-    const float3 pixel = (float3) (get_global_id(0), get_global_id(1), screen_z);
-    float3 dir = pixel - eye;
-    dir = normalize(dir);
+__kernel void render(__global const int* voxels, int size, int eye_x, int eye_y, int eye_z, int screen_z, float angle, __write_only image2d_t screen)
+{
+    int screen_x = get_global_id(0) - size/2;
+    int screen_y = size/2 - get_global_id(1);
+    float3 eye = (float3) (eye_x, eye_y, eye_z);
+    float3 pixel = (float3) (screen_x, screen_y, screen_z);
+    float3 dir = normalize(pixel - eye);
 
-    // Determines where the ray intersects with the voxel bounding box
-    int distance = 0x00;
-    float3 box_intersection;
+    // Ray origin and camera rotation
+    float3 origin = normalize(eye);
+    float radius = 230;
+    float new_origin_x = radius * (origin.x * cos(angle) - origin.z * sin(angle));
+    float new_origin_z = radius * (origin.x * sin(angle) + origin.z * cos(angle));
+    origin.x = new_origin_x;
+    origin.z = new_origin_z;
 
-    for (int i = 0; i < size; i++)
-    {
-        int index = i * size * size + get_global_id(1) * size + get_global_id(0);
-        int voxel = voxels[index];
-        if (voxel != 0)
-            distance = voxel;
-        //if (distance > 255) distance = 0;
-    }
-    
-    /*if (intersect(eye, dir, (float3) (0,0,0), (float3) (size, size, size), &box_intersection))
+    float new_dir_x = dir.x * cos(angle) - dir.z * sin(angle);
+    float new_dir_z = dir.x * sin(angle) + dir.z * cos(angle);
+    dir.x = new_dir_x;
+    dir.z = new_dir_z;
+
+    // Determines where the ray intersects with the volume bounding box
+    float distance = 0;
+    float3 box_intersection = (float3) (0, 0, 0);
+    if (intersect(origin, dir, (float3) (-size/2, -size/2, -size/2), (float3) (size/2, size/2, size/2), &box_intersection))
     {
         // Walks the ray through the data until it hits a non-zero voxel
-        int3 pixel_intersection = box_intersection;
-        for (distance = 0; distance < size; distance++)
+        for (int i= 0; i < size; i++)
         {
-            pixel_intersection.x = (int) (box_intersection.x + dir.x*distance);
-            pixel_intersection.y = (int) (box_intersection.y + dir.y*distance);
-            pixel_intersection.z = (int) (box_intersection.z + dir.z*distance);
-            int index = pixel_intersection.z * size * size + pixel_intersection.y * size + pixel_intersection.x;
+            int voxel_coord_x = (int) (box_intersection.x + dir.x * i + size/2);
+            int voxel_coord_y = (int) (box_intersection.y + dir.y * i + size/2);
+            int voxel_coord_z = (int) (box_intersection.z + dir.z * i + size/2);
+            int index = voxel_coord_z * size * size + voxel_coord_y * size + voxel_coord_x;
             int voxel = voxels[index];
             if (voxel != 0)
             {
+                distance = voxel;
                 break;
             }
         }
-        distance = 0x00;
-    }*/
+        distance = (1 - length(origin - box_intersection) / 500) * 255;//255 - (length(origin - box_intersection))/2;
+    }
 
     // Draws the pixel based on the voxel's depth (black if ray did not intersect bounding box)
     uint4 write_pixel = (uint4) (distance);

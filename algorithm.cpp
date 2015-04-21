@@ -16,6 +16,7 @@ cl::Context context;
 cl::CommandQueue command_queue;
 cl::Program::Sources sources;
 cl::Program program;
+cl::Buffer buffer_voxels;
 
 Algorithm::Algorithm()
 {
@@ -145,19 +146,38 @@ void Algorithm::convertDisparityMapToDepthMap(Image& disparity_map, int focal_le
     std::cout << "Done! OpenCL depth map projection took " << timeInMillis  << "ms" << std::endl;
 }
 
-void Algorithm::render(int* voxels, int size, Image& screen)
+void Algorithm::setVolume(int* voxels, int size)
 {
     std::clock_t startTicks = std::clock();
+    
+    volume.voxels = voxels;
+    volume.size = size;
 
-    unsigned int voxel_count = size * size * size;
-    cl::Buffer buffer_voxels(context, CL_MEM_READ_ONLY, sizeof(int) * voxel_count);
-    command_queue.enqueueWriteBuffer(buffer_voxels, CL_TRUE, 0, sizeof(int) * voxel_count, voxels);
+    unsigned int voxel_count = volume.size * volume.size * volume.size;
+    buffer_voxels = cl::Buffer(context, CL_MEM_READ_ONLY, sizeof(int) * voxel_count);
+    command_queue.enqueueWriteBuffer(buffer_voxels, CL_TRUE, 0, sizeof(int) * voxel_count, volume.voxels);
+
+    // Displays the time taken to execute the function
+    std::clock_t endTicks = std::clock();
+    std::clock_t clockTicksTaken = endTicks - startTicks;
+    double timeInSeconds = clockTicksTaken / (double) CLOCKS_PER_SEC;
+    double timeInMillis = timeInSeconds * 1000.0;
+    std::cout << "Done! Transferring volume took " << timeInMillis  << "ms" << std::endl;
+}
+
+void Algorithm::render(int eye_x, int eye_y, int eye_z, int screen_z, float angle, Image& screen)
+{
     cl::Image2D clImage_screen(context, CL_MEM_WRITE_ONLY, cl::ImageFormat(CL_RGBA, CL_UNSIGNED_INT8), screen.getWidth(), screen.getHeight());
 
     cl::Kernel disparity_kernel(program, "render");
     disparity_kernel.setArg(0, buffer_voxels);
-    disparity_kernel.setArg(1, size);
-    disparity_kernel.setArg(2, clImage_screen);
+    disparity_kernel.setArg(1, volume.size);
+    disparity_kernel.setArg(2, eye_x);
+    disparity_kernel.setArg(3, eye_y);
+    disparity_kernel.setArg(4, eye_z);
+    disparity_kernel.setArg(5, screen_z);
+    disparity_kernel.setArg(6, angle);
+    disparity_kernel.setArg(7, clImage_screen);
  
     // Enqueues the execution of the kernel
     command_queue.enqueueNDRangeKernel(
@@ -177,13 +197,6 @@ void Algorithm::render(int* voxels, int size, Image& screen)
     region[2] = 1;
     unsigned int* pixel_data = screen.getPixels();
     command_queue.enqueueReadImage(clImage_screen, CL_TRUE, origin, region, 0, 0, pixel_data, NULL, NULL);
-    
-    // Displays the time taken to execute the function
-    std::clock_t endTicks = std::clock();
-    std::clock_t clockTicksTaken = endTicks - startTicks;
-    double timeInSeconds = clockTicksTaken / (double) CLOCKS_PER_SEC;
-    double timeInMillis = timeInSeconds * 1000.0;
-    std::cout << "Done! OpenCL rendering took " << timeInMillis  << "ms" << std::endl;
 }
 
 std::string Algorithm::loadSource(std::string filename)
