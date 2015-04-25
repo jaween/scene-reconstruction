@@ -106,19 +106,21 @@ bool intersect(float3 ray_origin, float3 ray_direction, float3 box_a, float3 box
     return false;
 }
 
-__kernel void render(__global const int* voxels, int size, int eye_x, int eye_y, int eye_z, int screen_z, float angle, __write_only image2d_t screen)
+__kernel void render(__global const int* voxels, int volume_size, int eye_x, int eye_y, int eye_z, int screen_z, float angle, float cam_distance, __write_only image2d_t screen)
 {
-    int screen_x = get_global_id(0) - size/2;
-    int screen_y = size/2 - get_global_id(1);
+    int screen_width = get_image_dim(screen).x;
+    int screen_height = get_image_dim(screen).y;
+    int screen_x = get_global_id(0) - screen_width/2;
+    int screen_y = screen_height/2 - get_global_id(1);
+    
     float3 eye = (float3) (eye_x, eye_y, eye_z);
     float3 pixel = (float3) (screen_x, screen_y, screen_z);
     float3 dir = normalize(pixel - eye);
 
     // Ray origin and camera rotation
     float3 origin = normalize(eye);
-    float radius = 230;
-    float new_origin_x = radius * (origin.x * cos(angle) - origin.z * sin(angle));
-    float new_origin_z = radius * (origin.x * sin(angle) + origin.z * cos(angle));
+    float new_origin_x = cam_distance * (origin.x * cos(angle) - origin.z * sin(angle));
+    float new_origin_z = cam_distance * (origin.x * sin(angle) + origin.z * cos(angle));
     origin.x = new_origin_x;
     origin.z = new_origin_z;
 
@@ -130,23 +132,30 @@ __kernel void render(__global const int* voxels, int size, int eye_x, int eye_y,
     // Determines where the ray intersects with the volume bounding box
     float distance = 0;
     float3 box_intersection = (float3) (0, 0, 0);
-    if (intersect(origin, dir, (float3) (-size/2, -size/2, -size/2), (float3) (size/2, size/2, size/2), &box_intersection))
+    if (intersect(origin, dir, (float3) (-volume_size/2, -volume_size/2, -volume_size/2), (float3) (volume_size/2, volume_size/2, volume_size/2), &box_intersection))
     {
-        // Walks the ray through the data until it hits a non-zero voxel
-        for (int i= 0; i < size; i++)
+        // Walks the ray through the volume until it hits a non-zero voxel
+        for (int i= 0; i < volume_size; i++)
         {
-            int voxel_coord_x = (int) (box_intersection.x + dir.x * i + size/2);
-            int voxel_coord_y = (int) (box_intersection.y + dir.y * i + size/2);
-            int voxel_coord_z = (int) (box_intersection.z + dir.z * i + size/2);
-            int index = voxel_coord_z * size * size + voxel_coord_y * size + voxel_coord_x;
-            int voxel = voxels[index];
-            if (voxel != 0)
+            unsigned int voxel_coord_x = (int) (box_intersection.x + dir.x * i + volume_size/2);
+            unsigned int voxel_coord_y = volume_size - (int) (box_intersection.y + dir.y * i + volume_size/2);
+            unsigned int voxel_coord_z = volume_size - (int) (box_intersection.z + dir.z * i + volume_size/2);
+            if (voxel_coord_x > volume_size || voxel_coord_y > volume_size || voxel_coord_z > volume_size)
             {
-                distance = voxel;
-                break;
+                distance = 0;
+            }
+            else
+            {
+                unsigned int index = voxel_coord_z * volume_size * volume_size + voxel_coord_y * volume_size + voxel_coord_x;
+                int voxel = voxels[index];
+                if (voxel != 0)
+                {
+                    distance = 255 - voxel;//(1 - length(origin - box_intersection) / 300) * 255;
+                    break;
+                }
             }
         }
-        distance = (1 - length(origin - box_intersection) / 500) * 255;//255 - (length(origin - box_intersection))/2;
+        //distance = (1 - length(origin - box_intersection) / 300) * 255;//255 - (length(origin - box_intersection))/2;
     }
 
     // Draws the pixel based on the voxel's depth (black if ray did not intersect bounding box)

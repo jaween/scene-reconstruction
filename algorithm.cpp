@@ -146,14 +146,14 @@ void Algorithm::convertDisparityMapToDepthMap(Image& disparity_map, int focal_le
     std::cout << "Done! OpenCL depth map projection took " << timeInMillis  << "ms" << std::endl;
 }
 
-void Algorithm::setVolume(int* voxels, int size)
+void Algorithm::setVolume(int* voxels, int volume_size)
 {
     std::clock_t startTicks = std::clock();
     
     volume.voxels = voxels;
-    volume.size = size;
+    volume.volume_size = volume_size;
 
-    unsigned int voxel_count = volume.size * volume.size * volume.size;
+    unsigned int voxel_count = volume.volume_size * volume.volume_size * volume.volume_size;
     buffer_voxels = cl::Buffer(context, CL_MEM_READ_ONLY, sizeof(int) * voxel_count);
     command_queue.enqueueWriteBuffer(buffer_voxels, CL_TRUE, 0, sizeof(int) * voxel_count, volume.voxels);
 
@@ -165,19 +165,20 @@ void Algorithm::setVolume(int* voxels, int size)
     std::cout << "Done! Transferring volume took " << timeInMillis  << "ms" << std::endl;
 }
 
-void Algorithm::render(int eye_x, int eye_y, int eye_z, int screen_z, float angle, Image& screen)
+void Algorithm::render(int eye_x, int eye_y, int eye_z, int screen_z, float angle, float cam_distance, Image& screen)
 {
     cl::Image2D clImage_screen(context, CL_MEM_WRITE_ONLY, cl::ImageFormat(CL_RGBA, CL_UNSIGNED_INT8), screen.getWidth(), screen.getHeight());
 
     cl::Kernel disparity_kernel(program, "render");
     disparity_kernel.setArg(0, buffer_voxels);
-    disparity_kernel.setArg(1, volume.size);
+    disparity_kernel.setArg(1, volume.volume_size);
     disparity_kernel.setArg(2, eye_x);
     disparity_kernel.setArg(3, eye_y);
     disparity_kernel.setArg(4, eye_z);
     disparity_kernel.setArg(5, screen_z);
     disparity_kernel.setArg(6, angle);
-    disparity_kernel.setArg(7, clImage_screen);
+    disparity_kernel.setArg(7, cam_distance);
+    disparity_kernel.setArg(8, clImage_screen);
  
     // Enqueues the execution of the kernel
     command_queue.enqueueNDRangeKernel(

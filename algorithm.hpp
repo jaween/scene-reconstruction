@@ -6,7 +6,7 @@
 struct Volume
 {
         int* voxels;
-        int size;
+        int volume_size;
 };
 
 class Algorithm
@@ -15,8 +15,8 @@ class Algorithm
 		Algorithm();
 		void generateDisparityMap(Image& left, Image& right, unsigned int window_size, Image& disparity);
 		void convertDisparityMapToDepthMap(Image& disparity_map, int focal_length, int baseline_mm, Image& depth_map);
-                void setVolume(int* voxels, int size);
-		void render(int eye_x, int eye_y, int eye_z, int screen_z, float angle, Image& screen);
+                void setVolume(int* voxels, int volume_size);
+		void render(int eye_x, int eye_y, int eye_z, int screen_z, float angle, float distance, Image& screen);
 
     private:
 		void initialiseOpenCL();
