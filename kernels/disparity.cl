@@ -1,18 +1,31 @@
 const sampler_t sampler = CLK_NORMALIZED_COORDS_FALSE | CLK_ADDRESS_CLAMP | CLK_FILTER_NEAREST;
 
+struct camera_intrinsics
+{
+    int focal_length;
+    int scale_x;
+    int scale_y;
+    int skew_coeff;
+};
+
 __kernel void disparity(__write_only image2d_t disparity, __read_only image2d_t left, __read_only image2d_t right, const int window_size)
 {
     const int width = get_image_width(disparity);
     const int height = get_image_width(disparity);
+
+    // Defines the center of the 'base window' as well as the pixel to be shaded
     int x = get_global_id(0);
     int y = get_global_id(1);
 
-    unsigned int minimum_sad = 1000000000;
-	unsigned int disparity_value = 0;
+    unsigned int minumum_sum_of_absolute_difference = 1000000000;
+    unsigned int disparity_value = 0;
 
+    // Walks the image horizontally, defines the center of the 'moving window'
     for (int window_x = 0; window_x < width; window_x++)
     {
-        int running_intensity = 0;
+        // Computes the total sum of absolute differences between corresponding pixels in the
+        // moving window and the base window
+        int running_sum_of_absolute_difference = 0;
         for (int i = -window_size / 2; i < window_size / 2; i++)
         {
             for (int j = -window_size / 2; j < window_size / 2; j++)
@@ -23,21 +36,21 @@ __kernel void disparity(__write_only image2d_t disparity, __read_only image2d_t 
                 int left_pixel = read_imageui(left, sampler, left_coordinate).x;
                 int right_pixel = read_imageui(right, sampler, right_coordinate).x;
                 
-                // Sum of absolute of differences
-                int diff = left_pixel - right_pixel;
-                running_intensity += abs(diff);
+                // Performs the SAD computation
+                int difference = left_pixel - right_pixel;
+                running_sum_of_absolute_difference += abs(difference);
             }
         }
 
-        // Keeps the minimum
-        if (running_intensity < minimum_sad)
+        // Keeps track of which movining window was most similar to the base window
+        if (running_sum_of_absolute_difference < minumum_sum_of_absolute_difference)
         {
-            minimum_sad = running_intensity;
+            minumum_sum_of_absolute_difference = running_sum_of_absolute_difference;
             disparity_value = abs(window_x - x);
         }
     }
 
-    // Writes the disparity value to the image
+    // Writes the disparity value to the image (clamped between 0 to 255) 
     disparity_value &= 0xFF;
     uint4 write_pixel = (uint4) (disparity_value);
     write_imageui(disparity, (int2) (x, y), write_pixel);
@@ -57,12 +70,43 @@ __kernel void disparityToDepth(__write_only image2d_t depth_map, __read_only ima
     write_imageui(depth_map, (int2) (x, y), write_pixel);
 }
 
-__kernel void depthToVertex(__read_only image2d_t depth_map, __global const int* inverse_intrinsic_matrix, __global const int* vertex_martrix)
+__kernel void generateVertexMap(__read_only image2d_t depth_map, __write_only image2d_t vertex_map)
+{
+    uint4 write_pixel = (uint4) (200);
+    write_imageui(vertex_map, (int2) (get_global_id(0), get_global_id(1)), write_pixel);
+    return;
+    
+    /*int x = get_global_id(0);
+    int y = get_global_id(1);
+
+    // Implements depth(x, y) * K_inverse * [x, y, 1]
+    int depth = read_imageui(depth_map, sampler, (int2) (x, y)).x;
+    float matrix_1_1 = intrinsics->focal_length * intrinsics->scale_x * x;
+    float matrix_2_1 = intrinsics->skew_coeff * x + intrinsics->focal_length * intrinsics->scale_y * y;
+    float matrix_3_1 = x * x + y * y + 1;
+    
+    uint4 vertex = (uint4) (matrix_1_1, matrix_2_1, matrix_3_1, 1);
+    vertex *= depth;*/
+}
+
+__kernel void generateNormalMap(__read_only image2d_t vertex_map, __write_only image2d_t normal_map)
 {
     int x = get_global_id(0);
     int y = get_global_id(1);
 
+    uint4 center = read_imageui(vertex_map, sampler, (int2) (x, y));
+    uint4 right = read_imageui(vertex_map, sampler, (int2) (x + 1, y)) - center;
+    uint4 down = read_imageui(vertex_map, sampler, (int2) (x, y + 1)) - center;
+
+    float4 cross_product = (float4) (
+                right.y * down.z - right.z * down.y,
+                right.z * down.x - right.x  * down.z,
+                right.x * down.y - right.y * down.x,
+                1);
+    cross_product = normalize(cross_product);
     
+    uint4 normal = (uint4) (cross_product.x * 255, cross_product.y * 255, cross_product.z * 255, cross_product.w * 255);
+    write_imageui(normal_map, (int2) (get_global_id(0), get_global_id(1)), normal);  
 }
 
 bool intersect(float3 ray_origin, float3 ray_direction, float3 box_a, float3 box_b, float3* box_intersection)
@@ -155,6 +199,7 @@ __kernel void render(__global const int* voxels, int volume_size, int eye_x, int
                 }
             }
         }
+        // Debug cube
         //distance = (1 - length(origin - box_intersection) / 300) * 255;//255 - (length(origin - box_intersection))/2;
     }
 

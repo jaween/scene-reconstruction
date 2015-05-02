@@ -104,6 +104,8 @@ int main()
     Image r = Image("res/image/tsu_r.png");
     Image disparity_map = Image(l.getWidth(), l.getHeight());
     Image depth_map = Image(l.getWidth(), l.getHeight());
+    Image vertex_map = Image(l.getWidth(), l.getHeight());
+    Image normal_map = Image(l.getWidth(), l.getHeight());
     Image screen = Image(l.getWidth(), r.getHeight());
 
     // Generates a disparity map from a stereo pair of images
@@ -119,6 +121,14 @@ int main()
     int art_baseline_mm = 160;
     algorithm.convertDisparityMapToDepthMap(disparity_map, art_focal_length, art_baseline_mm, depth_map);
     //depth_map = Image("res/image/depth_test.png");
+
+    // Tracks the camera between frames
+    camera_intrinsics intrinsics;
+    intrinsics.focal_length = tsu_focal_length;
+    intrinsics.scale_x = 1;
+    intrinsics.scale_y = 1;
+    intrinsics.skew_coeff = 0;
+    algorithm.trackCamera(depth_map, &intrinsics, vertex_map, normal_map, NULL);
 
     // Generates a volume and and it to GPU memory
     int volume_size = std::max(depth_map.getWidth(), depth_map.getHeight());
