@@ -1,5 +1,6 @@
 #include <algorithm>
 #include <cmath>
+#include <ctime>
 #include <iostream>
 #include <string>
 
@@ -7,7 +8,7 @@
 #include "image.hpp"
 #include "window_manager.hpp"
 
-void generateVolume(Image& depth_map, int* voxels, int volume_size)
+void generateVolume(Image& depth_map, int* volume, int volume_size)
 {
     for (int y = 0; y < depth_map.getHeight(); y++)
     {
@@ -19,7 +20,7 @@ void generateVolume(Image& depth_map, int* voxels, int volume_size)
             int volume_size = depth_map.getWidth();
             int voxel_z = ((pixel & 0xFF) / 255.0) * volume_size;
             int voxel_index = voxel_z * volume_size * volume_size + y * volume_size + x;
-            voxels[voxel_index] = pixel & 0xFF;
+            volume[voxel_index] = pixel & 0xFF;
         }
     }
 }
@@ -95,46 +96,26 @@ void tempManageInput(bool& done, bool& left, bool& up, bool& right, bool& down, 
         }
 }
 
+void loadFrame(int frame, Image& l, Image& r)
+{
+    l = Image("res/image/tsu_l.png");
+    r = Image("res/image/tsu_r.png");
+}
+
 int main()
 {
+    srand(time(NULL));
     Algorithm algorithm = Algorithm();
 
     // Creates and loads images
     Image l = Image("res/image/tsu_l.png");
     Image r = Image("res/image/tsu_r.png");
+    
     Image disparity_map = Image(l.getWidth(), l.getHeight());
     Image depth_map = Image(l.getWidth(), l.getHeight());
     Image vertex_map = Image(l.getWidth(), l.getHeight());
     Image normal_map = Image(l.getWidth(), l.getHeight());
     Image screen = Image(l.getWidth(), r.getHeight());
-
-    // Generates a disparity map from a stereo pair of images
-    int window_size = 9;
-    std::cout << "Generating disparity map" << std::endl;
-    algorithm.generateDisparityMap(l, r, window_size, disparity_map);
-
-    // Projects the disparity map into a depth map
-    std::cout << "Converting to depth map" << std::endl;
-    int tsu_focal_length = 615;
-    int tsu_baseline_mm = 10;
-    int art_focal_length = 3740;
-    int art_baseline_mm = 160;
-    algorithm.convertDisparityMapToDepthMap(disparity_map, art_focal_length, art_baseline_mm, depth_map);
-    //depth_map = Image("res/image/depth_test.png");
-
-    // Tracks the camera between frames
-    camera_intrinsics intrinsics;
-    intrinsics.focal_length = tsu_focal_length;
-    intrinsics.scale_x = 1;
-    intrinsics.scale_y = 1;
-    intrinsics.skew_coeff = 0;
-    algorithm.trackCamera(depth_map, &intrinsics, vertex_map, normal_map, NULL);
-
-    // Generates a volume and and it to GPU memory
-    int volume_size = std::max(depth_map.getWidth(), depth_map.getHeight());
-    int* voxels = new int[volume_size * volume_size * volume_size] {};
-    generateVolume(depth_map, voxels, volume_size);
-    algorithm.setVolume(voxels, volume_size);
 
     // Initialises the window
     std::string title = "Render";
@@ -151,14 +132,58 @@ int main()
     float cam_distance = 240;
 
     // Temp keyboard input
-    bool left = true;
+    bool left = false;
     bool up = false;
     bool right = false;
     bool down = false;
-
     bool done = false;
+
+    bool volume_allocated = false;
     while (!done)
     {
+        int frame = 0;
+        //loadFrame(frame, l, r);
+        
+        // Generates a disparity map from a stereo pair of images
+        int window_size = 9;
+        std::cout << "Generating disparity map" << std::endl;
+        algorithm.generateDisparityMap(l, r, window_size, disparity_map);
+        
+        // Projects the disparity map into a depth map
+        std::cout << "Converting to depth map" << std::endl;
+        int tsu_focal_length = 615;
+        int tsu_baseline_mm = 10;
+        int art_focal_length = 3740;
+        int art_baseline_mm = 160;
+        algorithm.convertDisparityMapToDepthMap(disparity_map, art_focal_length, art_baseline_mm, depth_map);
+        
+        // Tracks the camera between frames
+        camera_intrinsics intrinsics;
+        intrinsics.focal_length = tsu_focal_length;
+        intrinsics.scale_x = 1;
+        intrinsics.scale_y = 1;
+        intrinsics.skew_coeff = 0;
+        //algorithm.trackCamera(depth_map, &intrinsics, vertex_map, normal_map, NULL);
+
+        // Allocation of storage for volume on GPU occurs once
+        // Subsequent camera frames will update this volume
+        if (!volume_allocated)
+        {
+            // Generates a volume and and it to GPU memory
+            std::cout << "Initialising and volume on CPU..." << std::endl;
+            int volume_size = std::max(depth_map.getWidth(), depth_map.getHeight());
+            int* volume = new int[volume_size * volume_size * volume_size] {};
+            generateVolume(depth_map, volume, volume_size);
+            
+            std::cout << "Allocating volume on GPU..." << std::endl;
+            algorithm.setVolume(volume, volume_size);
+            
+            volume_allocated = true;
+            std::cout << "Volume allocated" << std::endl;
+
+            delete [] volume;
+        }
+    
         // Retrieves user input
         tempManageInput(done, left, up, right, down, degrees, cam_distance);
         
@@ -168,6 +193,4 @@ int main()
         window_manager.render();
         SDL_Delay(4);
     }
-
-    delete [] voxels;
 }

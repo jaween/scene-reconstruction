@@ -70,13 +70,13 @@ __kernel void disparityToDepth(__write_only image2d_t depth_map, __read_only ima
     write_imageui(depth_map, (int2) (x, y), write_pixel);
 }
 
-__kernel void generateVertexMap(__read_only image2d_t depth_map, __write_only image2d_t vertex_map)
+__kernel void generateVertexMap(__read_only image2d_t depth_map, __constant struct camera_intrinsics* intrinsics, __write_only image2d_t vertex_map)
 {
     uint4 write_pixel = (uint4) (200);
     write_imageui(vertex_map, (int2) (get_global_id(0), get_global_id(1)), write_pixel);
     return;
     
-    /*int x = get_global_id(0);
+    int x = get_global_id(0);
     int y = get_global_id(1);
 
     // Implements depth(x, y) * K_inverse * [x, y, 1]
@@ -86,7 +86,7 @@ __kernel void generateVertexMap(__read_only image2d_t depth_map, __write_only im
     float matrix_3_1 = x * x + y * y + 1;
     
     uint4 vertex = (uint4) (matrix_1_1, matrix_2_1, matrix_3_1, 1);
-    vertex *= depth;*/
+    vertex *= depth;
 }
 
 __kernel void generateNormalMap(__read_only image2d_t vertex_map, __write_only image2d_t normal_map)

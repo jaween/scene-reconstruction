@@ -54,7 +54,7 @@ void Algorithm::initialiseOpenCL()
 }
 
 void Algorithm::generateDisparityMap(Image& left, Image& right, unsigned int window_size, Image& disparity_map)
-{    
+{
     startTimer();
     
     // Allocates buffers on the device
@@ -67,7 +67,7 @@ void Algorithm::generateDisparityMap(Image& left, Image& right, unsigned int win
     disparity_kernel.setArg(1, clImage_left);
     disparity_kernel.setArg(2, clImage_right);
     disparity_kernel.setArg(3, window_size);
-    
+
     executeImageKernel(disparity_kernel, clImage_disparity, disparity_map);
     endTimer("Disparity map generation");
 }
@@ -98,8 +98,8 @@ void Algorithm::trackCamera(Image& depth_map, camera_intrinsics* intrinsics, Ima
 
     cl::Kernel disparity_kernel(program, "generateVertexMap");
     disparity_kernel.setArg(0, clImage_depth);
-    //disparity_kernel.setArg(1, intrinsics);
-    disparity_kernel.setArg(1, clImage_vertex);
+    disparity_kernel.setArg(1, intrinsics);
+    disparity_kernel.setArg(2, clImage_vertex);
 
     executeImageKernel(disparity_kernel, clImage_vertex, vertex_map);
     endTimer("Tracking camera");
@@ -145,7 +145,7 @@ std::string Algorithm::loadSource(std::string filename)
     return buffer.str();
 }
 
-void Algorithm::executeImageKernel(cl::Kernel kernel, cl::Image2D out_buffer, Image& out_image)
+inline void Algorithm::executeImageKernel(cl::Kernel& kernel, cl::Image2D& out_buffer, Image& out_image)
 {
     // Enqueues the execution of the kernel
     command_queue.enqueueNDRangeKernel(
@@ -179,5 +179,5 @@ void Algorithm::endTimer(std::string function)
     std::clock_t clockTicksTaken = timerEndTicks - timerStartTicks;
     double timeInSeconds = clockTicksTaken / (double) CLOCKS_PER_SEC;
     double timeInMillis = timeInSeconds * 1000.0;
-    std::cout << function << " took " << timeInMillis  << "ms" << std::endl;
+    //std::cout << function << " took " << timeInMillis  << "ms" << std::endl;
 }

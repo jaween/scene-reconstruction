@@ -33,7 +33,7 @@ class Algorithm
     private:
         void initialiseOpenCL();
         std::string loadSource(std::string filename);
-        void executeImageKernel(cl::Kernel kernel, cl::Image2D out_buffer, Image& out_image);
+        void executeImageKernel(cl::Kernel& kernel, cl::Image2D& out_buffer, Image& out_image);
         void startTimer();
         void endTimer(std::string function);
 
@@ -45,6 +45,8 @@ class Algorithm
         cl::Buffer buffer_voxels;
         Volume volume;
         std::clock_t timerStartTicks;
+
+        cl::Image2D clImage_disparity;
 };
 
 #endif
