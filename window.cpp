@@ -3,16 +3,16 @@
 
 #include "window.hpp"
 
-Window::Window(unsigned int width, unsigned int height, std::string title)
+Window::Window(unsigned int width, unsigned int height, const PixelFormat& pixel_format, std::string title)
 {
     m_surface = NULL;
-    createWindow(width, height, title);
+    createWindow(width, height, pixel_format, title);
 }
 
-Window::Window(const Image& image, std::string title)
+Window::Window(Image* image, const PixelFormat& pixel_format, std::string title)
 {
-    createWindow(image.getWidth(), image.getHeight(), title);
-    setPixels(image);
+    createWindow(image->getWidth(), image->getHeight(), pixel_format, title);
+    m_image = image;
 }
 
 Window::~Window()
@@ -25,7 +25,7 @@ Window::~Window()
     SDL_DestroyWindow(m_window);
 }
 
-void Window::createWindow(unsigned int width, unsigned int height, std::string title)
+void Window::createWindow(unsigned int width, unsigned int height, const PixelFormat& pixel_format, std::string title)
 {
     m_window = SDL_CreateWindow(title.c_str(), SDL_WINDOWPOS_UNDEFINED, SDL_WINDOWPOS_UNDEFINED, width, height, SDL_WINDOW_SHOWN);
     if (m_window != NULL)
@@ -45,8 +45,22 @@ void Window::createWindow(unsigned int width, unsigned int height, std::string t
             SDL_SetRenderDrawColor(m_renderer, 0xFF, 0xFF, 0xFF, 0xFF);
     
             m_window_id = SDL_GetWindowID(m_window);
-    
-            m_texture = SDL_CreateTexture(m_renderer, SDL_PIXELFORMAT_ABGR8888, SDL_TEXTUREACCESS_STREAMING, width, height);
+
+            unsigned int sdl_pixel_format;
+            switch (pixel_format)
+            {
+                case RGB:
+                    sdl_pixel_format = SDL_PIXELFORMAT_RGB24;
+                    break;
+                case ABGR:
+                    sdl_pixel_format = SDL_PIXELFORMAT_ABGR8888;
+                    break;
+                case GREY:
+                default:
+                    std::cout << "Window: Setting pixel format to ABGR8888" << std::endl;
+                    sdl_pixel_format = SDL_PIXELFORMAT_ABGR8888;
+            }
+            m_texture = SDL_CreateTexture(m_renderer, sdl_pixel_format, SDL_TEXTUREACCESS_STREAMING, width, height);
         }
     }
     else
@@ -55,15 +69,16 @@ void Window::createWindow(unsigned int width, unsigned int height, std::string t
     }
 }
 
-void Window::setPixels(const Image& image)
+void Window::setImage(Image* image)
 {
-    m_surface = image.getSurface();
+    m_image = image;
 }
 
 void Window::render()
 {
     if (m_surface != NULL)
     {
+        m_surface = m_image->getSurface();
         SDL_UpdateTexture(m_texture, NULL, m_surface->pixels, m_surface->pitch);
     }
     SDL_RenderClear(m_renderer);

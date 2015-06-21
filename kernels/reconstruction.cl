@@ -1,13 +1,5 @@
 const sampler_t sampler = CLK_NORMALIZED_COORDS_FALSE | CLK_ADDRESS_CLAMP | CLK_FILTER_NEAREST;
 
-struct camera_intrinsics
-{
-    int focal_length;
-    int scale_x;
-    int scale_y;
-    int skew_coeff;
-};
-
 __kernel void disparity(__write_only image2d_t disparity, __read_only image2d_t left, __read_only image2d_t right, const int window_size)
 {
     const int width = get_image_width(disparity);
@@ -70,23 +62,24 @@ __kernel void disparityToDepth(__write_only image2d_t depth_map, __read_only ima
     write_imageui(depth_map, (int2) (x, y), write_pixel);
 }
 
-__kernel void generateVertexMap(__read_only image2d_t depth_map, __constant struct camera_intrinsics* intrinsics, __write_only image2d_t vertex_map)
+__kernel void generateVertexMap(__read_only image2d_t depth_map, const int focal_length,
+    const int scale_x, const int scale_y, const int skew_coeff, const int principal_point_x,
+    const int principal_point_y, __write_only image2d_t vertex_map)
 {
-    uint4 write_pixel = (uint4) (200);
-    write_imageui(vertex_map, (int2) (get_global_id(0), get_global_id(1)), write_pixel);
-    return;
-    
     int x = get_global_id(0);
     int y = get_global_id(1);
-
+    
     // Implements depth(x, y) * K_inverse * [x, y, 1]
     int depth = read_imageui(depth_map, sampler, (int2) (x, y)).x;
-    float matrix_1_1 = intrinsics->focal_length * intrinsics->scale_x * x;
-    float matrix_2_1 = intrinsics->skew_coeff * x + intrinsics->focal_length * intrinsics->scale_y * y;
-    float matrix_3_1 = x * x + y * y + 1;
-    
-    uint4 vertex = (uint4) (matrix_1_1, matrix_2_1, matrix_3_1, 1);
+    float reprojected_x = focal_length * scale_x * x;
+    float reprojected_y = skew_coeff * x + focal_length * scale_y * y;
+    float reprojected_z = principal_point_x * x + principal_point_y * y + 1;
+
+    unsigned int packed = ((int) (reprojected_x) << 16) | ((int) (reprojected_y) << 8) | (int) (reprojected_z);
+    //uint4 vertex = (uint4) (packed);
+    uint4 vertex = (uint4) (1, reprojected_x, reprojected_y, reprojected_z);
     vertex *= depth;
+    write_imageui(vertex_map, (int2) (get_global_id(0), get_global_id(1)), vertex);
 }
 
 __kernel void generateNormalMap(__read_only image2d_t vertex_map, __write_only image2d_t normal_map)

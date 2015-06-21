@@ -1,5 +1,5 @@
 LIBS = -lSDL2 -lSDL2_image -lOpenCL
-OBJ = main.o image.o window.o window_manager.o algorithm.o
+OBJ = main.o image.o window.o window_manager.o algorithm.o manager.o
 OUTPUT = reconstruct
 FLAGS = -std=c++11 # -fsanitize=address
 CXX = g++ $(FLAGS)

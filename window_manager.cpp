@@ -5,22 +5,23 @@
 
 WindowManager::WindowManager()
 {
-    // Initialises window
-    bool result = initialiseSDL();
-    if (result == false)
-    {
-	return;
-    }
+    initialiseSDL();
 }
 
 WindowManager::~WindowManager()
 {
+    for (Window* window : windows)
+    {
+        delete window;
+    }
     SDL_Quit();
 }
 
-void WindowManager::addWindow(Window* window)
+Window* WindowManager::createWindow(Image* image, const Window::PixelFormat& pixel_format, std::string title)
 {
+    Window* window = new Window(image, pixel_format, title);
     windows.push_back(window);
+    return window;
 }
 
 void WindowManager::render()

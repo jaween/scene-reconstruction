@@ -9,15 +9,17 @@
 class Image
 {
     public:
+                Image();
 		Image(unsigned int width, unsigned int height);
 		Image(std::string filename);
 		~Image();
 		void load(std::string filename);
+                void loadPGM(std::string filename);
+                void savePGM(std::string prefix);
 		void save(std::string prefix);
 		void fill(unsigned int intensity);
 		unsigned int getWidth() const;
 		unsigned int getHeight() const;
-		//unsigned int get(unsigned int x, unsigned int y) const;
 		unsigned int getIntensity(unsigned int x, unsigned int y) const;
 		void set(unsigned int x, unsigned int y, unsigned int intensity);
 		SDL_Surface* getSurface() const;
@@ -27,7 +29,13 @@ class Image
     private:
 		void grayscale();
 		std::string getDateTime();
-		SDL_Surface* m_surface;
+		SDL_Surface* m_surface = NULL;
+
+                char* pgm_data = NULL;
+                unsigned int pgm_width;
+                unsigned int pgm_height;
+                unsigned int pgm_max_grey;
+                unsigned int pgm_data_size;
 };
 
 #endif

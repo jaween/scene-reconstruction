@@ -11,7 +11,7 @@ class WindowManager
     public:
         WindowManager();
         ~WindowManager();
-        void addWindow(Window* window);
+        Window* createWindow(Image*, const Window::PixelFormat& pixel_format, std::string title);
         void render();
 
     private:

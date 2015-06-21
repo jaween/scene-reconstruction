@@ -1,196 +1,28 @@
-#include <algorithm>
-#include <cmath>
-#include <ctime>
-#include <iostream>
-#include <string>
-
-#include "algorithm.hpp"
-#include "image.hpp"
-#include "window_manager.hpp"
-
-void generateVolume(Image& depth_map, int* volume, int volume_size)
-{
-    for (int y = 0; y < depth_map.getHeight(); y++)
-    {
-        for (int x = 0; x < depth_map.getWidth(); x++)
-        {
-            int pixel_index = y * depth_map.getWidth() + x;
-            unsigned int pixel = depth_map.getPixels()[pixel_index];
-
-            int volume_size = depth_map.getWidth();
-            int voxel_z = ((pixel & 0xFF) / 255.0) * volume_size;
-            int voxel_index = voxel_z * volume_size * volume_size + y * volume_size + x;
-            volume[voxel_index] = pixel & 0xFF;
-        }
-    }
-}
-
-void tempManageInput(bool& done, bool& left, bool& up, bool& right, bool& down, int& degrees, float& cam_distance)
-{
-    SDL_Event event;
-    while(SDL_PollEvent(&event))
-        {
-            switch (event.type)
-            {
-                case SDL_KEYDOWN:
-                    left = false;
-                    up = false;
-                    right = false;
-                    down = false;
-                    switch (event.key.keysym.sym)
-                    {
-                        case SDLK_LEFT:
-                            left = true;
-                            break;
-                        case SDLK_UP:
-                            up = true;
-                            break;
-                        case SDLK_RIGHT:
-                            right = true;
-                            break;
-                        case SDLK_DOWN:
-                            down = true;
-                            break;
-                        case SDLK_ESCAPE:
-                            done = true;
-                            continue;
-                    }
-                    break;
-                case SDL_KEYUP:
-                    switch (event.key.keysym.sym)
-                    {
-                        case SDLK_LEFT:
-                            left = false;
-                            break;
-                        case SDLK_UP:
-                            up = false;
-                            break;
-                        case SDLK_RIGHT:
-                            right = false;
-                            break;
-                        case SDLK_DOWN:
-                            down = false;
-                            break;
-                        case SDLK_ESCAPE:
-                            done = false;
-                            continue;
-                    }
-                    break;
-            }
-        }
-        if (left)
-        {
-            degrees -= 2;
-        }
-        if (up)
-        {
-            cam_distance -= 4;
-        }
-        if (right)
-        {
-            degrees += 2;
-        }
-        if (down)
-        {
-            cam_distance += 4;
-        }
-}
-
-void loadFrame(int frame, Image& l, Image& r)
-{
-    l = Image("res/image/tsu_l.png");
-    r = Image("res/image/tsu_r.png");
-}
+#include "manager.hpp"
+#include "util.hpp"
 
 int main()
 {
-    srand(time(NULL));
-    Algorithm algorithm = Algorithm();
-
-    // Creates and loads images
-    Image l = Image("res/image/tsu_l.png");
-    Image r = Image("res/image/tsu_r.png");
+    std::string footage_directory = "res/image/binoculus_2/rectified_";
     
-    Image disparity_map = Image(l.getWidth(), l.getHeight());
-    Image depth_map = Image(l.getWidth(), l.getHeight());
-    Image vertex_map = Image(l.getWidth(), l.getHeight());
-    Image normal_map = Image(l.getWidth(), l.getHeight());
-    Image screen = Image(l.getWidth(), r.getHeight());
+    // Camera configuration details
+    int tsu_baseline_mm = 10;
+    int tsu_focal_length = 615;
+    int art_baseline_mm = 160;
+    int art_focal_length = 3740;
+    int bbb_baseline_mm = 119;
+    int bbb_focal_length = 145;
 
-    // Initialises the window
-    std::string title = "Render";
-    WindowManager window_manager = WindowManager();
-    Window window = Window(screen, title);
-    window_manager.addWindow(&window);
+    Util::CameraConfig camera_config;
+    camera_config.baseline = tsu_baseline_mm;
+    camera_config.focal_length = tsu_focal_length;
+    camera_config.scale_x = 1;
+    camera_config.scale_y = 1;
+    camera_config.skew_coeff = 0;
 
-    // Rendering parameters
-    int eye_x = 0;
-    int eye_y = 0;
-    int eye_z = 340;
-    int screen_z = 280;
-    int degrees = 0;
-    float cam_distance = 240;
-
-    // Temp keyboard input
-    bool left = false;
-    bool up = false;
-    bool right = false;
-    bool down = false;
-    bool done = false;
-
-    bool volume_allocated = false;
-    while (!done)
-    {
-        int frame = 0;
-        //loadFrame(frame, l, r);
-        
-        // Generates a disparity map from a stereo pair of images
-        int window_size = 9;
-        std::cout << "Generating disparity map" << std::endl;
-        algorithm.generateDisparityMap(l, r, window_size, disparity_map);
-        
-        // Projects the disparity map into a depth map
-        std::cout << "Converting to depth map" << std::endl;
-        int tsu_focal_length = 615;
-        int tsu_baseline_mm = 10;
-        int art_focal_length = 3740;
-        int art_baseline_mm = 160;
-        algorithm.convertDisparityMapToDepthMap(disparity_map, art_focal_length, art_baseline_mm, depth_map);
-        
-        // Tracks the camera between frames
-        camera_intrinsics intrinsics;
-        intrinsics.focal_length = tsu_focal_length;
-        intrinsics.scale_x = 1;
-        intrinsics.scale_y = 1;
-        intrinsics.skew_coeff = 0;
-        //algorithm.trackCamera(depth_map, &intrinsics, vertex_map, normal_map, NULL);
-
-        // Allocation of storage for volume on GPU occurs once
-        // Subsequent camera frames will update this volume
-        if (!volume_allocated)
-        {
-            // Generates a volume and and it to GPU memory
-            std::cout << "Initialising and volume on CPU..." << std::endl;
-            int volume_size = std::max(depth_map.getWidth(), depth_map.getHeight());
-            int* volume = new int[volume_size * volume_size * volume_size] {};
-            generateVolume(depth_map, volume, volume_size);
-            
-            std::cout << "Allocating volume on GPU..." << std::endl;
-            algorithm.setVolume(volume, volume_size);
-            
-            volume_allocated = true;
-            std::cout << "Volume allocated" << std::endl;
-
-            delete [] volume;
-        }
+    // Initialises and begins the scene reconstruction pipeline
+    Manager manager = Manager(footage_directory, camera_config);
+    manager.start();
     
-        // Retrieves user input
-        tempManageInput(done, left, up, right, down, degrees, cam_distance);
-        
-        // Renders the volume in the window
-        float radians = degrees * (M_PI / 180.0);
-        algorithm.render(eye_x, eye_y, eye_z, screen_z, radians, cam_distance, screen);
-        window_manager.render();
-        SDL_Delay(4);
-    }
+    return 0;
 }

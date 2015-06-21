@@ -1,9 +1,16 @@
 #include <ctime>
+#include <fstream>
 #include <iostream>
 #include <SDL2/SDL.h>
 #include <SDL2/SDL_image.h>
+#include <string>
 
 #include "image.hpp"
+
+Image::Image()
+{
+    // No implementation
+}
 
 Image::Image(unsigned int width, unsigned int height)
 {
@@ -19,21 +26,85 @@ Image::Image(unsigned int width, unsigned int height)
 Image::Image(std::string filename)
 {
     load(filename);
-    grayscale();
+    //grayscale();
 }
 
 Image::~Image()
 {
-    SDL_FreeSurface(m_surface);
+    if (m_surface != NULL)
+    {
+        SDL_FreeSurface(m_surface);
+    }
+
+    if (pgm_data != NULL)
+    {
+        delete pgm_data;
+    }
 }
 
 void Image::load(std::string filename)
 {
+    // Frees any existing image
+    if (m_surface != NULL)
+    {
+        SDL_FreeSurface(m_surface);
+    }
+    
     m_surface = IMG_Load(filename.c_str());
     if (m_surface == NULL)
     {
         std::cerr << "Failed to load image" << std::endl;
     }
+}
+
+void Image::loadPGM(std::string filename)
+{
+    std::streampos begin, end;
+    std::ifstream image(filename, std::ios::binary);
+    std::string word;
+    
+    image >> word;
+    if (word.compare("P5"))
+    {
+        std::cerr << "Didn't start with magic number 'P5'" << std::endl;
+    }
+
+    image >> word;
+    pgm_width = std::stoi(word);
+    
+    image >> word;
+    pgm_height = std::stoi(word);
+
+    image >> word;
+    pgm_max_grey = std::stoi(word);
+
+    pgm_data_size = pgm_width * pgm_height * 2;
+    pgm_data = new char[pgm_data_size];
+    image.read(pgm_data, pgm_data_size); 
+
+    image.close();
+    
+}
+
+void Image::savePGM(std::string prefix)
+{
+    std::string date_time = getDateTime();
+    std::string directory = "out/";
+    std::string extension = ".pgm";
+    
+    std::string filename = directory + prefix + " " + date_time + extension;
+    
+    std::filebuf fb;
+    fb.open(filename, std::ios::out);
+    std::ostream image(&fb);
+
+    image << "P5\n";
+    image << pgm_width << " " << pgm_height << "\n";
+    image << pgm_max_grey << "\n";
+    image << *pgm_data;
+
+    fb.close();
+    std::cout << filename << std::endl;
 }
 
 void Image::save(std::string prefix)
