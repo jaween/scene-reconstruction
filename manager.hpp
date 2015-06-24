@@ -19,7 +19,6 @@ class Manager
                 void disparityToDepth();
                 void trackCamera();
                 void fuseIntoVolume();
-                void generateVolume(int volume_size);
                 void renderVolume();
                 void getInput();
                 
@@ -39,6 +38,7 @@ class Manager
                 int* voxels = NULL;
                 bool more_frames = true;
                 unsigned int frame_index = 0;
+                unsigned int volume_size;
 
                 std::string footage_directory;
                 Util::CameraConfig camera_config;

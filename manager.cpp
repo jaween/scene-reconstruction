@@ -13,14 +13,18 @@ Manager::Manager(std::string footage_directory, Util::CameraConfig& camera_confi
     right_rectified = new Image();
     more_frames = loadFrame(footage_directory, frame_index);
     frame_index++;
-
+    
     // Allocates memory for temporary outputs after each pipeline stage
-    disparity_map = new Image(left_rectified->getWidth(), left_rectified->getHeight());
-    depth_map = new Image(left_rectified->getWidth(), left_rectified->getHeight());
-    vertex_map = new Image(left_rectified->getWidth(), left_rectified->getHeight());
-    normal_map = new Image(left_rectified->getWidth(), left_rectified->getHeight());
-    render = new Image(left_rectified->getWidth(), left_rectified->getHeight());
+    unsigned int width = left_rectified->getWidth();
+    unsigned int height = left_rectified->getHeight();
+    disparity_map = new Image(width, height);
+    depth_map = new Image(width, height);
+    vertex_map = new Image(width, height);
+    normal_map = new Image(width, height);
+    render = new Image(width, height);
     output = disparity_map;
+
+    algorithm.initialiseVolume(width);
 
     // Creates the window for output
     Window::PixelFormat pixel_format = Window::PixelFormat::ABGR;
@@ -48,14 +52,14 @@ Manager::~Manager()
 }
 
 void Manager::start()
-{
+{   
     while (!done)
     {
         // Performs the stages of reconstruction
         computeDisparity();
         disparityToDepth();
-        trackCamera();
-        fuseIntoVolume();
+        //trackCamera();
+        //fuseIntoVolume();
         renderVolume();
 
         // Loads in the next frame for processing
@@ -117,38 +121,14 @@ void Manager::disparityToDepth()
 void Manager::trackCamera()
 {
     // Tracks the camera between frames
-    //algorithm.trackCamera(depth_map, &intrinsics, vertex_map, normal_map, NULL);
+    int* transformation = NULL;
+    algorithm.trackCamera(depth_map, vertex_map, normal_map, camera_config, transformation);
 }
 
 void Manager::fuseIntoVolume()
 {
-    // Generates a volume and and it to GPU memory
-    if (!volume_allocated)
-    {
-        int volume_size = std::max(depth_map->getWidth(), depth_map->getHeight());
-        generateVolume(volume_size);
-        algorithm.setVolume(voxels, volume_size);
-        
-        volume_allocated = true;
-    }
-}
-
-void Manager::generateVolume(int volume_size)
-{
-    voxels = new int[volume_size * volume_size * volume_size] {};
-    for (int y = 0; y < depth_map->getHeight(); y++)
-    {
-        for (int x = 0; x < depth_map->getWidth(); x++)
-        {
-            int pixel_index = y * depth_map->getWidth() + x;
-            unsigned int pixel = depth_map->getPixels()[pixel_index];
-
-            int volume_size = depth_map->getWidth();
-            int voxel_z = ((pixel & 0xFF) / 255.0) * volume_size;
-            int voxel_index = voxel_z * volume_size * volume_size + y * volume_size + x;
-            voxels[voxel_index] = pixel & 0xFF;
-        }
-    }
+    // ?? To do: Volumetric integration of depth map into signed distance function 3D representation
+    algorithm.tempSetVoxels(disparity_map);
 }
 
 void Manager::renderVolume()
@@ -158,10 +138,12 @@ void Manager::renderVolume()
     int eye_y = 0;
     int eye_z = 340;
     int screen_z = 280;
-
-    // Renders the volume in the window
     float radians = degrees * (M_PI / 180.0);
+
+    // Performs ray tracing on the GPU
     algorithm.render(eye_x, eye_y, eye_z, screen_z, radians, cam_distance, render);
+
+    // Refreshes the window
     window_manager.render();
     SDL_Delay(16);
 }
