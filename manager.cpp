@@ -45,10 +45,7 @@ Manager::~Manager()
     delete normal_map;
     delete render;
     
-    if (voxels != NULL)
-    {
-        delete [] voxels;
-    }
+    delete [] voxels;
 }
 
 void Manager::start()

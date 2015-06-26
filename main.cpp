@@ -1,8 +1,12 @@
+#include <stdlib.h>
+#include <string>
+
 #include "manager.hpp"
 #include "util.hpp"
 
-int main()
+int main(int argc, char* argv[])
 {
+    // Footage location
     std::string footage_directory = "res/image/binoculus_2/rectified_";
     
     // Camera configuration details
@@ -19,10 +23,10 @@ int main()
     camera_config.scale_x = 1;
     camera_config.scale_y = 1;
     camera_config.skew_coeff = 0;
-
+    
     // Initialises and begins the scene reconstruction pipeline
     Manager manager = Manager(footage_directory, camera_config);
     manager.start();
     
-    return 0;
+    return EXIT_SUCCESS;
 }

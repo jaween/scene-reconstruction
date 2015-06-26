@@ -12,7 +12,7 @@ Algorithm::Algorithm()
 Algorithm::~Algorithm()
 {
     // ?? Temp: CPU voxel storage
-    delete volume.voxels;
+    delete [] volume.voxels;
 }
 
 void Algorithm::initialiseOpenCL()

@@ -8,7 +8,7 @@
 
 struct Volume
 {
-    int* voxels;
+    int* voxels = NULL;
     int cube_width;
 };
 
@@ -36,8 +36,6 @@ class Algorithm
         cl::Program program;
         cl::Buffer buffer_voxels;
         Volume volume;
-
-        cl::Image2D clImage_disparity;
 };
 
 #endif
