@@ -48,17 +48,17 @@ __kernel void disparity(__write_only image2d_t disparity, __read_only image2d_t 
     write_imageui(disparity, (int2) (x, y), write_pixel);
 }
 
+// Converts disparity values to depth in millimeters
 __kernel void disparityToDepth(__write_only image2d_t depth_map, __read_only image2d_t disparity_map, const int focal_length, const int baseline_mm)
 {
     int x = get_global_id(0);
     int y = get_global_id(1);
-    const float baseline = (float) baseline_mm / 1000.0f;
-    
+
     // Implements the equation "Z = f * B / d"
     uint disp = read_imageui(disparity_map, sampler, (int2) (x, y)).x;
-    uint depth = (int) (((focal_length * baseline) / (float) disp)) & 0xFF;
-    uint4 write_pixel = (uint4) (depth);
-
+    uint depth = (focal_length * baseline_mm) / disp;
+    uint write_pixel = depth;
+    
     write_imageui(depth_map, (int2) (x, y), write_pixel);
 }
 
@@ -66,41 +66,37 @@ __kernel void generateVertexMap(__read_only image2d_t depth_map, const int focal
     const int scale_x, const int scale_y, const int skew_coeff, const int principal_point_x,
     const int principal_point_y, __write_only image2d_t vertex_map)
 {
-    int x = get_global_id(0);
-    int y = get_global_id(1);
+    int2 coord = (int2) (get_global_id(0), get_global_id(1));
     
-    // Implements depth(x, y) * K_inverse * [x, y, 1]
-    int depth = read_imageui(depth_map, sampler, (int2) (x, y)).x;
-    float reprojected_x = focal_length * scale_x * x;
-    float reprojected_y = skew_coeff * x + focal_length * scale_y * y;
-    float reprojected_z = principal_point_x * x + principal_point_y * y + 1;
+    uint depth = read_imageui(depth_map, sampler, coord).x;
 
-    // ?? To do: Pack these values properly to allow values greater than 255
-    unsigned int packed = ((int) (reprojected_x) << 16) | ((int) (reprojected_y) << 8) | (int) (reprojected_z);
-    //uint4 vertex = (uint4) (packed);
-    uint4 vertex = (uint4) (1, reprojected_x, reprojected_y, reprojected_z);
-    vertex *= depth;
-    write_imageui(vertex_map, (int2) (get_global_id(0), get_global_id(1)), vertex);
+    // Implements depth(x, y) * K_inverse * [x, y, 1]
+    uint4 vertex = (uint4) (
+        (uint) (focal_length * scale_x * coord.x) * depth ,
+        (uint) (skew_coeff * coord.x + focal_length * scale_y * coord.y) * depth,
+        (uint) (principal_point_x * coord.x + principal_point_y * coord.y + 1) * depth,
+        0
+    );
+    
+    write_imageui(vertex_map, coord, vertex);
 }
 
 __kernel void generateNormalMap(__read_only image2d_t vertex_map, __write_only image2d_t normal_map)
 {
     int x = get_global_id(0);
-    int y = get_global_id(1);   
+    int y = get_global_id(1);
 
     uint4 center = read_imageui(vertex_map, sampler, (int2) (x, y));
-    uint4 right = read_imageui(vertex_map, sampler, (int2) (x + 1, y)) - center;
-    uint4 down = read_imageui(vertex_map, sampler, (int2) (x, y + 1)) - center;
+    uint4 right = read_imageui(vertex_map, sampler, (int2) (x + 1, y));
+    uint4 down = read_imageui(vertex_map, sampler, (int2) (x, y + 1));
 
-    float4 cross_product = (float4) (
-                right.y * down.z - right.z * down.y,
-                right.z * down.x - right.x  * down.z,
-                right.x * down.y - right.y * down.x,
-                1);
-    cross_product = normalize(cross_product);
-    
-    uint4 normal = (uint4) (cross_product.x * 255, cross_product.y * 255, cross_product.z * 255, cross_product.w * 255);
-    write_imageui(normal_map, (int2) (get_global_id(0), get_global_id(1)), normal);  
+    float4 vector_right = (float4) (right.x - center.x, right.y - center.y, right.z - center.z, 0.0f);
+    float4 vector_down = (float4) (down.x - center.x, down.y - center.y, down.z - center.z, 0.0f);
+
+    float4 cross_product = cross(vector_right, vector_down);
+    float4 normal = normalize(cross_product);
+
+    write_imagef(normal_map, (int2) (x, y), normal);  
 }
 
 /**
@@ -155,7 +151,7 @@ __kernel void findCorrespondences(__read_only image2d_t depth_map,
     prev_image_vertex.x = (viewer.z/prev_global_vertex.z) * prev_global_vertex.x - viewer.x;
     prev_image_vertex.y = (viewer.z/prev_global_vertex.z) * prev_global_vertex.y - viewer.y;
 
-    // If p is within the bounds of the vertex map
+    // If prev_image_vertex is within the bounds of the vertex map
     if (prev_image_vertex.x >= 0 && prev_image_vertex.x < get_image_width(depth_map) &&
         prev_image_vertex.y >= 0 && prev_image_vertex.y < get_image_height(depth_map))
     {
@@ -220,13 +216,33 @@ __kernel void findCorrespondences(__read_only image2d_t depth_map,
     }
 }
 
-// Outputs the transformation given
-__kernel void findTrasformation(__read_only image2d_t vertex_map, __global const int* correspondences,
-    float tranlation_x, float translation_y, float translation_z,
-    float rotation_x, float rotation_y, float rotation_z)
+// Outputs the A matrix and b vector of the equation |Ax + b|, used to compute transformation
+__kernel void computeMatricesForTransformation(__read_only image2d_t vertex_map,
+    __read_only image2d_t normal_map, __global const float3* correspondences,
+    __global float* matrix_a, __global float* vector_b)
 {
-    // Iterative closest point
-    
+    uint x = get_global_id(0);
+    uint y = get_global_id(1);
+    uint width = get_image_width(vertex_map);
+    uint index = y * width + x;
+    uint row_index = index * 6;
+
+    float3 source = correspondences[index];
+    uint4 dest = read_imageui(vertex_map, sampler, (int2) (x, y));
+    uint4 normal = read_imageui(normal_map, sampler, (int2) (x, y));
+
+    // ?? To do: Why would I need a tree reduction here?
+    // Calculates the elements of a row of matrix A
+    matrix_a[row_index + 0] = normal.z * source.y - normal.y * source.z;
+    matrix_a[row_index + 1] = normal.x * source.z - normal.z * source.x;
+    matrix_a[row_index + 2] = normal.y * source.x - normal.x * source.y;
+    matrix_a[row_index + 3] = normal.x;
+    matrix_a[row_index + 4] = normal.y;
+    matrix_a[row_index + 5] = normal.z;
+
+    // Calculates the componets of the Nx1 vector b
+    vector_b[index] = normal.x * dest.x + normal.y * dest.y + normal.z * dest.z
+        - normal.x * source.x - normal.y * source.y - normal.z * source.z;
 }
 
 bool intersect(float3 ray_origin, float3 ray_direction, float3 box_a, float3 box_b, float3* box_intersection)
