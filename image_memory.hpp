@@ -11,8 +11,8 @@ class ImageMemory : public Image
                 ~ImageMemory();
                 virtual uint32_t* getPixels();
                 virtual void load(std::string filename);
-		virtual void save(std::string prefix);
-		virtual void fill(unsigned int colour);
+                virtual void save(std::string prefix);
+                virtual void fill(unsigned int colour);
 
         private:
                 uint32_t* m_data = NULL;

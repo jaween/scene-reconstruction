@@ -12,8 +12,8 @@ class Window
                         RGB, ABGR, GREY
                 };
 
-		Window(Image* image, const PixelFormat& pixel_format, std::string title);
-		virtual void refresh() = 0;
+                Window(Image* image, const PixelFormat& pixel_format, std::string title);
+                virtual void refresh() = 0;
 
         protected:
                 Image* m_image = NULL;

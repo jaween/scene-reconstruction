@@ -32,8 +32,8 @@ namespace Util
                 Vector3D rotation;
         };
 
-        void startDebugTimer();
-        void endDebugTimer(std::string function);
+        void startDebugTimer(std::string tag);
+        void endDebugTimer(std::string tag);
 };
 
 #endif

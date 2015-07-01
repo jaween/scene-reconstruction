@@ -11,60 +11,62 @@
 
 Manager::Manager(GraphicsFactory* graphics_factory, std::string footage_directory, Util::CameraConfig& camera_config)
 {
+        m_footage_directory = footage_directory;
+        m_camera_config = camera_config;
+
         // Loads the rectified images
-        left_rectified = graphics_factory->createImage(1, 1, 1);
-        right_rectified = graphics_factory->createImage(1, 1, 1);
-        more_frames = loadFrame(footage_directory, frame_index);
-        frame_index++;
+        m_left_rectified = graphics_factory->createImage(1, 1, 1);
+        m_right_rectified = graphics_factory->createImage(1, 1, 1);
+        m_more_frames = loadNextFrame();
+        if (!m_more_frames)
+        {
+                std::cerr << "Could not locate footage in directory " << m_footage_directory << std::endl;
+        }
 
         // Allocates memory for temporary outputs after each pipeline stage
-        unsigned int width = left_rectified->getWidth();
-        unsigned int height = left_rectified->getHeight();
-        disparity_map = graphics_factory->createImage(width, height, 1);
-        depth_map = graphics_factory->createImage(width, height, 1);
-        vertex_map = graphics_factory->createImageMemory(width, height, 4);
-        normal_map = graphics_factory->createImageMemory(width, height, 4);
-        render = graphics_factory->createImage(width, height, 1);
-        output = disparity_map;
+        unsigned int width = m_left_rectified->getWidth();
+        unsigned int height = m_left_rectified->getHeight();
+        m_disparity_map = graphics_factory->createImage(width, height, 1);
+        m_depth_map = graphics_factory->createImage(width, height, 1);
+        m_vertex_map = graphics_factory->createImageMemory(width, height, 4);
+        m_normal_map = graphics_factory->createImageMemory(width, height, 4);
+        m_render = graphics_factory->createImage(width, height, 1);
+        m_output = m_render;
 
         // Allocates memory for the algorithms
-        algorithm.initialise(graphics_factory, width, height);
+        m_algorithm.initialise(graphics_factory, width, height);
 
         // Creates the window for output
-        window_manager = graphics_factory->createWindowManager();
+        m_window_manager = graphics_factory->createWindowManager();
         Window::PixelFormat pixel_format = Window::PixelFormat::ABGR;
         std::string title = "Scene Reconstruction";
-        window_manager->createWindow(output, pixel_format, title);
-
-        this->footage_directory = footage_directory;
-        this->camera_config = camera_config;
+        m_window_manager->createWindow(m_output, pixel_format, title);
 }
 
 Manager::~Manager()
 {
-        delete [] voxels;
+        delete [] m_voxels;
 }
 
 void Manager::start()
 {
-        while (!done)
+        while (!m_done)
         {
-                // Performs the stages of reconstruction
-                computeDisparity();
-                disparityToDepth();
-                trackCamera();
-                //fuseIntoVolume();
-                //renderVolume();
-                refreshOutput();
-
-                // Loads in the next frame for processing
-                if (more_frames)
+                if (m_more_frames)
                 {
-                        more_frames = loadFrame(footage_directory, frame_index);
-                        frame_index++;
+                        // Performs the stages of reconstruction
+                        computeDisparity();
+                        disparityToDepth();
+                        trackCamera();
+                        fuseIntoVolume();
+
+                        // Loads in the next frame for processing
+                        m_more_frames = loadNextFrame();
                 }
 
-                // User input
+                // Draws to the screen and gets user input
+                renderVolume();
+                refreshWindow();
                 getInput();
         }
 }
@@ -72,27 +74,38 @@ void Manager::start()
 void Manager::computeDisparity()
 {
         // Generates a disparity map from a stereo pair of images
-        int window_size = 9;
-        algorithm.generateDisparityMap(left_rectified, right_rectified, window_size, disparity_map);
+        const int window_size = 9;
+        m_algorithm.generateDisparityMap(m_left_rectified, m_right_rectified, window_size, m_disparity_map);
 }
 
 void Manager::disparityToDepth()
 {
         // Projects the disparity map into a depth map
-        algorithm.convertDisparityMapToDepthMap(disparity_map, camera_config.focal_length, camera_config.baseline, depth_map);
+        m_algorithm.convertDisparityMapToDepthMap(
+                m_disparity_map,
+                m_camera_config.focal_length,
+                m_camera_config.baseline,
+                m_depth_map
+        );
 }
 
 void Manager::trackCamera()
 {
         // Tracks the camera between frames
         Util::Transformation transformation;
-        algorithm.trackCamera(depth_map, vertex_map, normal_map, camera_config, transformation);
+        m_algorithm.trackCamera(
+                m_depth_map,
+                m_vertex_map,
+                m_normal_map,
+                m_camera_config,
+                transformation
+        );
 }
 
 void Manager::fuseIntoVolume()
 {
         // ?? To do: Volumetric integration of depth map into signed distance function 3D representation
-        algorithm.tempSetVoxels(disparity_map);
+        m_algorithm.tempSetVoxels(m_disparity_map);
 }
 
 void Manager::renderVolume()
@@ -102,46 +115,47 @@ void Manager::renderVolume()
         int eye_y = 0;
         int eye_z = 340;
         int screen_z = 280;
-        float radians = degrees * (M_PI / 180.0);
+        float radians = m_degrees * (M_PI / 180.0);
 
         // Performs ray tracing on the GPU
-        algorithm.render(eye_x, eye_y, eye_z, screen_z, radians, cam_distance, render);
+        m_algorithm.render(eye_x, eye_y, eye_z, screen_z, radians, m_cam_distance, m_render);
 }
 
-void Manager::refreshOutput()
+void Manager::refreshWindow()
 {
-        // Refreshes the window
-        window_manager->refresh();
+        // Updates the output window
+        m_window_manager->refresh();
         SDL_Delay(16);
 }
 
-bool Manager::loadFrame(std::string footage_directory, unsigned int frame_index)
+bool Manager::loadNextFrame()
 {
-        std::cout << "Frame " << frame_index << std::endl;
-
         std::string extension = ".png";
         std::stringstream filename_stream;
 
         // Loads the left frame
-        filename_stream << footage_directory << "l_" << std::setfill('0') << std::setw(4) << frame_index << extension;
+        filename_stream << m_footage_directory << "l_" << std::setfill('0') << std::setw(4) << m_frame_index << extension;
         std::ifstream image_stream = std::ifstream(filename_stream.str().c_str());
         if (!image_stream.good())
         {
-                std::cerr << "Could not locate image " << filename_stream.str() << std::endl;
+                std::cout << "End of footage" << std::endl;
                 return false;
         }
-        left_rectified->load(filename_stream.str());
+        m_left_rectified->load(filename_stream.str());
 
         // Loads the right frame
         filename_stream = std::stringstream(std::string());
-        filename_stream << footage_directory << "r_" << std::setfill('0') << std::setw(4) << frame_index << extension;
+        filename_stream << m_footage_directory << "r_" << std::setfill('0') << std::setw(4) << m_frame_index << extension;
         image_stream = std::ifstream(filename_stream.str().c_str());
         if (!image_stream.good())
         {
-                std::cerr << "Could not locate image " << filename_stream.str() << std::endl;
+                std::cout << std::endl << "End of footage" << std::endl;
                 return false;
         }
-        right_rectified->load(filename_stream.str());
+        m_right_rectified->load(filename_stream.str());
+
+        std::cout << std::endl << "Frame " << m_frame_index << std::endl;
+        m_frame_index++;
 
         return true;
 }
@@ -154,26 +168,26 @@ void Manager::getInput()
                 switch (event.type)
                 {
                         case SDL_KEYDOWN:
-                                left = false;
-                                up = false;
-                                right = false;
-                                down = false;
+                                m_left = false;
+                                m_up = false;
+                                m_right = false;
+                                m_down = false;
                                 switch (event.key.keysym.sym)
                                 {
                                         case SDLK_LEFT:
-                                                left = true;
+                                                m_left = true;
                                                 break;
                                         case SDLK_UP:
-                                                up = true;
+                                                m_up = true;
                                                 break;
                                         case SDLK_RIGHT:
-                                                right = true;
+                                                m_right = true;
                                                 break;
                                         case SDLK_DOWN:
-                                                down = true;
+                                                m_down = true;
                                                 break;
                                         case SDLK_ESCAPE:
-                                                done = true;
+                                                m_done = true;
                                                 continue;
                                 }
                                 break;
@@ -181,39 +195,39 @@ void Manager::getInput()
                                 switch (event.key.keysym.sym)
                                 {
                                         case SDLK_LEFT:
-                                                left = false;
+                                                m_left = false;
                                                 break;
                                         case SDLK_UP:
-                                                up = false;
+                                                m_up = false;
                                                 break;
                                         case SDLK_RIGHT:
-                                                right = false;
+                                                m_right = false;
                                                 break;
                                         case SDLK_DOWN:
-                                                down = false;
+                                                m_down = false;
                                                 break;
                                         case SDLK_ESCAPE:
-                                                done = false;
+                                                m_done = false;
                                                 continue;
                                 }
                                 break;
                 }
         }
 
-        if (left)
+        if (m_left)
         {
-                degrees -= 2;
+                m_degrees -= 2;
         }
-        if (up)
+        if (m_up)
         {
-                cam_distance -= 4;
+                m_cam_distance -= 4;
         }
-        if (right)
+        if (m_right)
         {
-                degrees += 2;
+                m_degrees += 2;
         }
-        if (down)
+        if (m_down)
         {
-                cam_distance += 4;
+                m_cam_distance += 4;
         }
 }

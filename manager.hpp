@@ -20,40 +20,40 @@ class Manager
                 void trackCamera();
                 void fuseIntoVolume();
                 void renderVolume();
-                void refreshOutput();
+                void refreshWindow();
 
-                bool loadFrame(std::string footage_directory, unsigned int frame_index);   
+                bool loadNextFrame();
                 void getInput();
-                
-                Algorithm algorithm;
 
-                Image* left_rectified = NULL;
-                Image* right_rectified = NULL;
-                Image* disparity_map = NULL;
-                Image* depth_map = NULL;
-                Image* vertex_map = NULL;
-                Image* normal_map = NULL;
-                Image* render = NULL;
-                Image* output = NULL;
-                
-                WindowManager* window_manager = NULL;
-                bool volume_allocated = false;
-                int* voxels = NULL;
-                bool more_frames = true;
-                unsigned int frame_index = 0;
-                unsigned int volume_size;
+                Algorithm m_algorithm;
 
-                std::string footage_directory;
-                Util::CameraConfig camera_config;
-                
+                Image* m_left_rectified = NULL;
+                Image* m_right_rectified = NULL;
+                Image* m_disparity_map = NULL;
+                Image* m_depth_map = NULL;
+                Image* m_vertex_map = NULL;
+                Image* m_normal_map = NULL;
+                Image* m_render = NULL;
+                Image* m_output = NULL;
+
+                WindowManager* m_window_manager = NULL;
+                bool m_volume_allocated = false;
+                int* m_voxels = NULL;
+                bool m_more_frames = true;
+                unsigned int m_frame_index = 0;
+                unsigned int m_volume_size;
+
+                std::string m_footage_directory;
+                Util::CameraConfig m_camera_config;
+
                 // Keyboard input
-                bool done = false;
-                bool left = false;
-                bool up = false;
-                bool right = false;
-                bool down = false;
-                int degrees = 0;
-                float cam_distance = 240;
+                bool m_done = false;
+                bool m_left = false;
+                bool m_up = false;
+                bool m_right = false;
+                bool m_down = false;
+                int m_degrees = 0;
+                float m_cam_distance = 240;
 };
 
 #endif

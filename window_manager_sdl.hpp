@@ -9,13 +9,13 @@
 
 class WindowManagerSdl : public WindowManager
 {
-	public:
-		WindowManagerSdl();
-		~WindowManagerSdl();
-		virtual Window* createWindow(Image* image, const Window::PixelFormat& pixel_format, std::string title);
+        public:
+                WindowManagerSdl();
+                ~WindowManagerSdl();
+                virtual Window* createWindow(Image* image, const Window::PixelFormat& pixel_format, std::string title);
 
-	private:
-		bool initialiseSDL();
+        private:
+                bool initialiseSDL();
 };
 
 #endif

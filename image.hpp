@@ -16,8 +16,8 @@ class Image
                 virtual unsigned int getWordsPerPixel();
                 virtual uint32_t* getPixels() = 0;
                 virtual void load(std::string filename) = 0;
-		virtual void save(std::string prefix) = 0;
-		virtual void fill(unsigned int colour) = 0;
+                virtual void save(std::string prefix) = 0;
+                virtual void fill(unsigned int colour) = 0;
 
         protected:
                 unsigned int m_width = 0;
