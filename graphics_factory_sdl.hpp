@@ -7,9 +7,9 @@
 
 class GraphicsFactorySdl : public GraphicsFactory
 {
-    public:
-        virtual WindowManager* createWindowManager();
-        virtual Image* createImage(unsigned int width, unsigned int height, unsigned int words_per_pixel);
+        public:
+                virtual WindowManager* createWindowManager();
+                virtual Image* createImage(unsigned int width, unsigned int height, unsigned int words_per_pixel);
 };
 
 #endif

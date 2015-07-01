@@ -11,7 +11,7 @@ class Window
                 enum PixelFormat {
                         RGB, ABGR, GREY
                 };
-                
+
 		Window(Image* image, const PixelFormat& pixel_format, std::string title);
 		virtual void refresh() = 0;
 
