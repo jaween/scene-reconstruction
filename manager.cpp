@@ -6,30 +6,35 @@
 
 #include "manager.hpp"
 
-Manager::Manager(std::string footage_directory, Util::CameraConfig& camera_config)
+// ?? To do: Decouple from SDL input (Use composition? Would that double up on SDL init()?)
+#include <SDL2/SDL.h>
+
+Manager::Manager(GraphicsFactory* graphics_factory, std::string footage_directory, Util::CameraConfig& camera_config)
 {
     // Loads the rectified images
-    left_rectified = new Image();
-    right_rectified = new Image();
+    left_rectified = graphics_factory->createImage(1, 1, 1);
+    right_rectified = graphics_factory->createImage(1, 1, 1);
     more_frames = loadFrame(footage_directory, frame_index);
     frame_index++;
-    
+
     // Allocates memory for temporary outputs after each pipeline stage
     unsigned int width = left_rectified->getWidth();
     unsigned int height = left_rectified->getHeight();
-    disparity_map = new Image(width, height);
-    depth_map = new Image(width, height);
-    vertex_map = new Image(width, height);
-    normal_map = new Image(width, height);
-    render = new Image(width, height);
+    disparity_map = graphics_factory->createImage(width, height, 1);
+    depth_map = graphics_factory->createImage(width, height, 1);
+    vertex_map = graphics_factory->createImageMemory(width, height, 4);
+    normal_map = graphics_factory->createImageMemory(width, height, 4);
+    render = graphics_factory->createImage(width, height, 1);
     output = disparity_map;
 
-    algorithm.initialiseVolume(width);
+    // Allocates memory for the algorithms
+    algorithm.initialise(graphics_factory, width, height);
 
     // Creates the window for output
+    window_manager = graphics_factory->createWindowManager();
     Window::PixelFormat pixel_format = Window::PixelFormat::ABGR;
     std::string title = "Scene Reconstruction";
-    window_manager.createWindow(output, pixel_format, title);
+    window_manager->createWindow(output, pixel_format, title);
 
     this->footage_directory = footage_directory;
     this->camera_config = camera_config;
@@ -37,27 +42,20 @@ Manager::Manager(std::string footage_directory, Util::CameraConfig& camera_confi
 
 Manager::~Manager()
 {
-    delete left_rectified;
-    delete right_rectified;
-    delete disparity_map;
-    delete depth_map;
-    delete vertex_map;
-    delete normal_map;
-    delete render;
-    
     delete [] voxels;
 }
 
 void Manager::start()
-{   
+{
     while (!done)
     {
         // Performs the stages of reconstruction
         computeDisparity();
         disparityToDepth();
-        //trackCamera();
+        trackCamera();
         //fuseIntoVolume();
-        renderVolume();
+        //renderVolume();
+        refreshOutput();
 
         // Loads in the next frame for processing
         if (more_frames)
@@ -71,10 +69,56 @@ void Manager::start()
     }
 }
 
+void Manager::computeDisparity()
+{
+    // Generates a disparity map from a stereo pair of images
+    int window_size = 9;
+    algorithm.generateDisparityMap(left_rectified, right_rectified, window_size, disparity_map);
+}
+
+void Manager::disparityToDepth()
+{
+    // Projects the disparity map into a depth map
+    algorithm.convertDisparityMapToDepthMap(disparity_map, camera_config.focal_length, camera_config.baseline, depth_map);
+}
+
+void Manager::trackCamera()
+{
+    // Tracks the camera between frames
+    Util::Transformation transformation;
+    algorithm.trackCamera(depth_map, vertex_map, normal_map, camera_config, transformation);
+}
+
+void Manager::fuseIntoVolume()
+{
+    // ?? To do: Volumetric integration of depth map into signed distance function 3D representation
+    algorithm.tempSetVoxels(disparity_map);
+}
+
+void Manager::renderVolume()
+{
+    // Rendering parameters
+    int eye_x = 0;
+    int eye_y = 0;
+    int eye_z = 340;
+    int screen_z = 280;
+    float radians = degrees * (M_PI / 180.0);
+
+    // Performs ray tracing on the GPU
+    algorithm.render(eye_x, eye_y, eye_z, screen_z, radians, cam_distance, render);
+}
+
+void Manager::refreshOutput()
+{
+    // Refreshes the window
+    window_manager->refresh();
+    SDL_Delay(16);
+}
+
 bool Manager::loadFrame(std::string footage_directory, unsigned int frame_index)
 {
     std::cout << "Frame " << frame_index << std::endl;
-    
+
     std::string extension = ".png";
     std::stringstream filename_stream;
 
@@ -100,49 +144,6 @@ bool Manager::loadFrame(std::string footage_directory, unsigned int frame_index)
     right_rectified->load(filename_stream.str());
 
     return true;
-}
-
-void Manager::computeDisparity()
-{
-    // Generates a disparity map from a stereo pair of images
-    int window_size = 9;
-    algorithm.generateDisparityMap(left_rectified, right_rectified, window_size, disparity_map);
-}
-
-void Manager::disparityToDepth()
-{
-    // Projects the disparity map into a depth map
-    algorithm.convertDisparityMapToDepthMap(disparity_map, camera_config.focal_length, camera_config.baseline, depth_map);
-}
-
-void Manager::trackCamera()
-{
-    // Tracks the camera between frames
-    int* transformation = NULL;
-    algorithm.trackCamera(depth_map, vertex_map, normal_map, camera_config, transformation);
-}
-
-void Manager::fuseIntoVolume()
-{
-    // ?? To do: Volumetric integration of depth map into signed distance function 3D representation
-    algorithm.tempSetVoxels(disparity_map);
-}
-
-void Manager::renderVolume()
-{
-    // Rendering parameters
-    int eye_x = 0;
-    int eye_y = 0;
-    int eye_z = 340;
-    int screen_z = 280;
-    float radians = degrees * (M_PI / 180.0);
-
-    // Performs ray tracing on the GPU
-    algorithm.render(eye_x, eye_y, eye_z, screen_z, radians, cam_distance, render);
-
-    // Refreshes the window
-    window_manager.render();
-    SDL_Delay(16);
 }
 
 void Manager::getInput()

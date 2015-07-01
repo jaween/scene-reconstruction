@@ -2,6 +2,7 @@
 #define MANAGER_HPP
 
 #include "algorithm.hpp"
+#include "graphics_factory.hpp"
 #include "image.hpp"
 #include "window_manager.hpp"
 #include "util.hpp"
@@ -9,21 +10,23 @@
 class Manager
 {
         public:
-                Manager(std::string footage_directory, Util::CameraConfig& camera_config);
+                Manager(GraphicsFactory* graphics_factory, std::string footage_directory, Util::CameraConfig& camera_config);
                 ~Manager();
                 void start();
 
         private:
-                bool loadFrame(std::string footage_directory, unsigned int frame_index);   
                 void computeDisparity();
                 void disparityToDepth();
                 void trackCamera();
                 void fuseIntoVolume();
                 void renderVolume();
+                void refreshOutput();
+
+                bool loadFrame(std::string footage_directory, unsigned int frame_index);   
                 void getInput();
                 
                 Algorithm algorithm;
-                
+
                 Image* left_rectified = NULL;
                 Image* right_rectified = NULL;
                 Image* disparity_map = NULL;
@@ -33,7 +36,7 @@ class Manager
                 Image* render = NULL;
                 Image* output = NULL;
                 
-                WindowManager window_manager = WindowManager();
+                WindowManager* window_manager = NULL;
                 bool volume_allocated = false;
                 int* voxels = NULL;
                 bool more_frames = true;

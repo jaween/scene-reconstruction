@@ -3,6 +3,7 @@
 
 #include <CL/cl.hpp>
 
+#include "graphics_factory.hpp"
 #include "image.hpp"
 #include "util.hpp"
 
@@ -17,11 +18,11 @@ class Algorithm
     public:
         Algorithm();
         ~Algorithm();
+        void initialise(GraphicsFactory* graphics_factory, unsigned int width, unsigned int height);
         void generateDisparityMap(Image* left, Image* right, unsigned int window_size, Image* disparity_map);
         void convertDisparityMapToDepthMap(Image* disparity_map, int focal_length, int baseline_mm, Image* depth_map);
-        void trackCamera(Image* depth_map, Image* vertex_map, Image* normal_map, const Util::CameraConfig& camera_config, int* transformation);
+        void trackCamera(Image* depth_map, Image* vertex_map, Image* normal_map, const Util::CameraConfig& camera_config, const Util::Transformation& transformation);
         void tempSetVoxels(Image* image);
-        void initialiseVolume(int cube_width);
         void render(int eye_x, int eye_y, int eye_z, int screen_z, float angle, float distance, Image* screen);
 
     private:
@@ -35,7 +36,12 @@ class Algorithm
         cl::Program::Sources sources;
         cl::Program program;
         cl::Buffer buffer_voxels;
+
+        cl::Buffer clBuffer_correspondences;
+
         Volume volume;
+        Image* prev_vertex_map;
+        Image* prev_normal_map;
 };
 
 #endif

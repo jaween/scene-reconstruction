@@ -1,21 +1,19 @@
-#ifndef WINDOW_MANAGER
-#define WINDOW_MANAGER
+#ifndef WINDOW_MANAGER_HPP
+#define WINDOW_MANAGER_HPP
 
-#include <SDL2/SDL.h>
 #include <vector>
 
+#include "image.hpp"
 #include "window.hpp"
 
 class WindowManager
 {
     public:
-        WindowManager();
         ~WindowManager();
-        Window* createWindow(Image*, const Window::PixelFormat& pixel_format, std::string title);
-        void render();
+        virtual Window* createWindow(Image* image, const Window::PixelFormat& pixel_format, std::string title) = 0;
+        virtual void refresh();
 
-    private:
-        bool initialiseSDL();
+    protected:
         std::vector<Window*> windows;
 };
 

@@ -1,6 +1,7 @@
 #include <stdlib.h>
 #include <string>
 
+#include "graphics_factory_sdl.hpp"
 #include "manager.hpp"
 #include "util.hpp"
 
@@ -23,10 +24,15 @@ int main(int argc, char* argv[])
     camera_config.scale_x = 1;
     camera_config.scale_y = 1;
     camera_config.skew_coeff = 0;
+
+    // Factory to create GUI toolkit specific classes
+    GraphicsFactory* graphics_factory = new GraphicsFactorySdl();
     
     // Initialises and begins the scene reconstruction pipeline
-    Manager manager = Manager(footage_directory, camera_config);
+    Manager manager = Manager(graphics_factory, footage_directory, camera_config);
     manager.start();
+
+    delete graphics_factory;
     
     return EXIT_SUCCESS;
 }

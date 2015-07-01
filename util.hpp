@@ -29,8 +29,7 @@ namespace Util
         struct Transformation
         {
                 Vector3D translation;
-                double rotation_x;
-                double rotation_z;
+                Vector3D rotation;
         };
 
         void startDebugTimer();
