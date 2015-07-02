@@ -1,16 +1,32 @@
+# Compiler and linking
 LIBS = -lSDL2 -lSDL2_image -lOpenCL
-OBJ = main.o image.o image_sdl.o image_memory.o window.o window_sdl.o window_manager.o window_manager_sdl.o algorithm.o manager.o graphics_factory.o graphics_factory_sdl.o util.o
-OUTPUT = reconstruct
-FLAGS = -std=c++11 # -fsanitize=address
-CXX = g++ $(FLAGS)
+FLAGS = -I $(DEPDIR) -std=c++11 # -fsanitize=address
+CXX = g++
 
-all : $(OUTPUT)
+# Binary executable output
+TARGETDIR = bin
+TARGET = reconstruct
 
-$(OUTPUT) : $(OBJ)
-	$(CXX) -o $(OUTPUT) $(LIBS) $(OBJ)
+# Source files
+SRCDIR = src
+SRCNAMES = main.cpp image.cpp image_sdl.cpp image_memory.cpp window.cpp window_sdl.cpp window_manager.cpp window_manager_sdl.cpp algorithm.cpp manager.cpp graphics_factory.cpp graphics_factory_sdl.cpp util.cpp
 
-$.o : $.cpp
-	$(CXX) $^
+# Header fies
+DEPDIR = include
 
+# Object files
+OBJDIR = build
+OBJ = $(addprefix $(OBJDIR)/,$(SRCNAMES:%.cpp=%.o))
+
+# Compilation rules
+$(TARGETDIR)/$(TARGET) : $(OBJ)
+	@mkdir -p $(TARGETDIR)
+	$(CXX) $(FLAGS) -o $@ $(LIBS) $^
+
+$(OBJDIR)/%.o : $(SRCDIR)/%.cpp
+	@mkdir -p $(OBJDIR)
+	$(CXX) $(FLAGS) -c -o $@ $<
+
+# Generated file clean up
 clean :
-	rm -rf *.o $(OUTPUT)
+	rm -rf $(OBJDIR)/*.o $(TARGETDIR)/*

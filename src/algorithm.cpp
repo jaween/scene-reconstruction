@@ -61,7 +61,7 @@ void Algorithm::initialiseOpenCL()
         context = cl::Context({device});
 
         // Loads and builds the kernel
-        std::string kernel_code = loadSource("kernels/reconstruction.cl");
+        std::string kernel_code = loadSource("src/kernels/reconstruction.cl");
         std::cout << "Loaded kernel" << std::endl << "Building kernel..." << std::endl;
         sources.push_back({kernel_code.c_str(), kernel_code.length()});
         program = cl::Program(context, sources);

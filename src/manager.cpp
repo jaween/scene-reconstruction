@@ -21,6 +21,7 @@ Manager::Manager(GraphicsFactory* graphics_factory, std::string footage_director
         if (!m_more_frames)
         {
                 std::cerr << "Could not locate footage in directory " << m_footage_directory << std::endl;
+                exit(EXIT_FAILURE);
         }
 
         // Allocates memory for temporary outputs after each pipeline stage

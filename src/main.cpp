@@ -8,7 +8,7 @@
 int main(int argc, char* argv[])
 {
         // Footage location
-        std::string footage_directory = "res/image/binoculus_2/rectified_";
+        std::string footage_directory = "res/rectified_";
 
         // Camera configuration details
         int tsu_baseline_mm = 10;
